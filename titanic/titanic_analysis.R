@@ -221,10 +221,175 @@ data_combined[which(data_combined$name %in% duplicate_names),]
 #interesting or not if that means that they were close and met each other.
 #It might be an endevour to deduce fare size using other variables and I think that Connolly, Miss. Kate might
 #help us with that "good time".
+#####
+
+####
+#Now that we are "sure" (hopefully!) that we ain't have duplicate names we can proceed. 
+#Since "title" might be nice feature to engineer let's see if it has any correlation with other features.
+#If one of the features has too much missing values, we can use new features as proxies and thus save some time with the imputation.
+#It is one of the strategies for handling missing data.
+#
+#So, let's see if there are any correlations with other variables to see if we are on a good track to extract title as feature.
+####
+
+#We gonna import R's stringr library which is helpful for string manipulations
+library(stringr)
+
+#Let's look at the misses: 
+misses <- data_combined[which(str_detect(data_combined$name, "Miss.")),]
+misses[1:5,]
+
+####
+#str_detect(string, pattern_in_string) returns a logical vector showing if pattern occured in the string
+#which function is "smart enought" to convert those logical table to particular numbers of rows where those occured
+####
+
+####
+#From this sample few things strike my interest, but when deciding if there are any correlations between that and title
+#some of them might be used in aggregate, and some not:
+# 1) All of the misses from this sample survived and they are in the third class. Might potentially help us 
+#    to understand who actually survived in third class. There aren't many, but not all people is dead!
+# 2) There is a bit of a variance in age but in an essence we can conclude they are relatively young. 
+#  At this stage we can give a hypothesis that title correlates with age. 
+# Since they are "unmarried" sibsp>0 would indicate that either they are traveling with siblings or not.
+# If they are widows (some prefer to be called Miss!) we would never know, but in general we can conclude they are 
+# unmarried women. 
+# parch>0 would indicate that either they are traveling with parents or childrens (if they are widows)
+# or parent(s) and child(ren)
+# It is not biologically possible that Sandstrom, Miss. Marguerite Rut could have a children thus I conclude that
+# parch for her means she is traveling with parent. 
+  
+summary(misses$age) 
+
+# The mean of 'miss' population is around 21.77 and 75% of misses are 30 years or less, so relatively "young population".
+# Remember also that we are making judgement with 50 NA's!
+# We can also give an assumption that those are non-married woman (that is what metadata is saying!) but they might
+# They might travel with their (boy)friend(s) but we can investigate them only by looking at ticket's etc. 
+# That might be helpfull for model to give better predictions. 
+##### 
+
+#Let's look at the mrs-es: 
+mrses <- data_combined[which(str_detect(data_combined$name, "Mrs.")), ]
+mrses[1:5,]
+
+####
+#From this sample we can conclude that they have high survival rate, and that they are more distributed toward upper classes 
+#2 of them are in first class, and another two at second class. 4/5 are in upper classes. 
+#They are relatively "old" in ages, but they are either widows or married (that is also what name feature is confirming!)
+
+summary(mrses$age)
+
+#Their mean is relatively higher than that in misses (36.8), and 75% of them are bellow 46.5 so relatively old!
+#Another confirmation that the age might be correlated with title IN GENERAL!
+
+#Nasser, Mrs. Nicholas (Adele Achem) raises an eyebrow but understanding how "eastern people" work (and name sounds quite "easterish")
+#nothing surprises me at that age. Maybe she is too young to be married because of data collection being wrong (and indeed it does!)
+#Maybe in practise her age is >insert_age_where_you_can_give_birth but this is the "real" data we are concernig with.
+#We get what we measure. Thus assumptions are based on data we are provided. 
+
+####
+#Since there are many more unique titles, we will be concerned with those that make huge % of data.
+#We've done with the females, so next logical step would be to see what's interesting about males!
+####
+
+males <- data_combined[which(data_combined$sex == "male"),]
+males[1:5,]
+
+#### FACTS
+# From this sample we can conclude that 5/5 are dead, 4/5*100% are in the third class
+# Mr can be either married or nonmarried man. Nothing about that can be deduced from their age if they are or if they are not,
+# but Master is proxy for younger boy. Those are definetly nonmarried males (or we hope so!) IN GENERAL. 
+# So, sibsp>1 (aswell as sibsp=0!) could be indicative of Mr. travelling with their spouses IN GENERAL!
+# My gosh there is so much variability to handle and think of... 
+# About titles and fares correlation, I think we need to use other features to conclude fare not just title.
+# Maybe there are patterns that would help us on overall score, but that is digging tooo much into the rabbit hole!
+####
+
+####
+#Since these are all the facts that concern only small subset of population (aka sample) we will expand it to see
+#if we can find some insights. We are gonna extract title feature by creating utility function for doing so, and then
+#we gonna use ggplot based on pclass and survived to see if there might be some real-estate in there. 
+####
 
 
-moras summary odraditi da vidis gdje je average godina za svaku od mrs i msses pa ako je taj average pomjeren onda jebiga 
-znas ko je stariji od zena i zasto predvidjeti da su starje ove ili mladje
+extractTitle <- function(name) {
+  name <- as.character(name)
+  
+  if (length(grep("Miss.", name)) > 0) {
+    return ("Miss.")
+  } else if (length(grep("Master.", name)) > 0) {
+    return ("Master.")
+  } else if (length(grep("Mrs.", name)) > 0) {
+    return ("Mrs.")
+  } else if (length(grep("Mr.", name)) > 0) {
+    return ("Mr.")
+  } else {
+    return ("Other")
+  }
+}
+
+#####
+#grep(pattern, vector)
+#Returns which indexes in vector have matching patten. Remember, R indexes from 1!
+#If there are any, that number would be larger than 0 and we use that information, combined with length to extract title!
+#
+#grep("Miss.", c("Miss. kelly", "dsddds")) --> 1
+#grep("Miss.", "Miss. kelly") <=> grep("Miss.", c("Miss. kelly")) --> 1
+#grep("Miss.", "krsds") --> 0
+#Be aware of using Mrs. as first else if, and then Mr. because of the way grep() works!
+#####
+
+#Let's make a title vector and populate it with particular titles, based on row numbers:
+
+titles <- NULL
+for (i in 1:nrow(data_combined)) {
+  titles <- c(titles, extractTitle(data_combined[i,"name"]))
+}
+
+data_combined$title <- as.factor(titles)
+
+#Here is one of the "whys" we use data_combined. If one finds out that title is "good" feature based on both datasets 
+#we can keep it and use it to train and test our ML model. If one finds out it's not good we can exclude it from both
+#datasets using one command. 
+
+
+
+#Let's gather some facts using our freshly made feature:
+
+ggplot(data_combined[1:891,], aes(x = title, fill = survived)) +
+  geom_bar() +
+  facet_wrap(~pclass) + 
+  ggtitle("Pclass") +
+  xlab("Title") +
+  ylab("Total Count") +
+  labs(fill = "Survived")
+
+
+######
+#That higher class people had more chance of survival is confirmed this time. 
+#"Women and children first" holds the water too, especially in the first and second class. 
+#
+#If one excludes everything except one title and see if there is any pattern, one would see that 
+#everything is quite skewed to the right.
+#
+#For example,if you just focus on Mr. title for three classes you will see that relative survival rate (based on the percent!)
+#declines as we progress from first to third class. That same logic applies for each title.
+#
+#Title "Others" seem to be just in first two classes so might be indicative of folks (titles) who are rich.
+#
+#Mr.'s in second and third class have relative survival rate almost the same (around 1/8), those in first class have better survival rate!
+#This is the thing with analysis: Even if Mr.'s in third class had lower rate of survival we should explain why, and see
+#those who survived, can we see using other features (but be careful not to overfit!) to find a trend for survival of folks in third class.
+
+
+#Fact (and hypothesis!): Title would be a really good predictor of survival. 
+
+ggplot(data_combined[1:891,], aes(x = title, fill = survived)) +
+  geom_density(alpha = 0.5) +
+  ggtitle("Survival Rates by Class")
+
+
+
 
 
 
