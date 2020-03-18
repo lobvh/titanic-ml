@@ -157,6 +157,9 @@ ggplot(data_combined[1:891,], aes(x = pclass, fill = survived)) +
 
 # - - - name - - - 
 
+
+
+
 #Let's examine the first few names just to see what it's composed of, and to get a little sense of it.
 #It doesn't matter which part of the dataset we will use here, we just want to see the structure, but since I'm using
 #it from the train dataset, it should be again noted that I have to convert variables "on the fly" ("not touching original test and training sets")
@@ -382,14 +385,68 @@ ggplot(data_combined[1:891,], aes(x = title, fill = survived)) +
 #those who survived, can we see using other features (but be careful not to overfit!) to find a trend for survival of folks in third class.
 
 
-#Fact (and hypothesis!): Title would be a really good predictor of survival. 
-
-ggplot(data_combined[1:891,], aes(x = title, fill = survived)) +
-  geom_density(alpha = 0.5) +
-  ggtitle("Survival Rates by Class")
+#Fact (and hypothesis!?): Title would be a really good predictor of survival. 
 
 
 
 
 
 
+
+# - - - sex - - - 
+
+
+
+
+####
+# From the analysis of 'title' variable (misses, mrses, males etc.) we infered that age and sex (as well as some other features!) 
+# seem pretty important, and that they might be correlated with title so we will take a closer look.
+###
+
+summary(data_combined$age)
+###
+#From the whole data_combined dataset (training+set) we see that there are a lot of NA's (around 20%!) and that is a lot of 
+# missing values. There are numerus ways one can handle missing data. 
+# For the ages one can for example impute missing ages with the (title etc.) mean or (title etc.) median.
+# Or make a linear regression model using every other feature except age as an independent variable and age as dependent,
+# make prediction's for the missing age and impute NA's with their predicted values, but keeping non-NA's as same. 
+# I've seen some authors say that if one put 0 as all NA's than for example neural network eventually learn that those are missing data.
+# Probably each ones have different drawbacks. 
+#
+# What we are gonna do here is run some "tests" to confirm that title could be a good proxy for age, so we are gonna forget about imputing missing values if we
+# confirm that for each title it's age distribution relatively generalizes that title.
+# And hopefully if we have "check" on each title, we are "safe" to ignore age and thus the imputation of it's missing values.
+###
+
+####
+#Some conclusions that stick to my head using the summary on age on whole dataset is that people here are relatively young (one can define young however he choses!) .
+# 75% of them are 40 and younger, and that 50% is less than 28.
+# There are some outliers which could be justified or not based on other features.
+# Mean is sliiiiiightly bigger than median which indicates sliiiiiiight skewnes to the right and thus sligghttt tendency
+# toward the "bigger age".
+# We once mentioned that the more the data is skewed towards something the more the tendency of an model is toward that skew.
+####
+
+summary(data_combined[1:891,"age"])
+
+####
+#One can also deduce that the training set has almost the same distribution for ages which indicates in order 
+#for age distribution on a complete dataset to remain same test set has to be similarly distributed as training set.
+#Linear algebra trickery?
+#I'm pointing this out because some authors say that it is good/ it saves the day (?) if your training and test data have similar distribution in terms of 
+# modeling. Or is it? 
+# Here is the summary for the training set: 
+
+summary(data_combined[891:1309, "age"])
+
+# + 
+
+summary(data_combined[1:891,"age"])
+
+# = 
+
+summary(data_combined$age)
+
+###
+#Now we are gonna check if we can make 'title' as proxy for age!
+###
