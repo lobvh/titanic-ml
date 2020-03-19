@@ -395,8 +395,37 @@ ggplot(data_combined[1:891,], aes(x = title, fill = survived)) +
 
 # - - - sex - - - 
 
+#####
+# What's the distribution of females to males across train & test?
+####
+table(data_combined$sex)
+
+#####
+#Some things to point out is that data is skewed to the male spectrum, and if most of the males died and most of the 
+#females survived models tend to be in a favour of that. Males are more likely to perish than females so model could
+#possibly deduce that "if you are a female you survive, if you are a male you are dead."
+####
+
+# Visualize the 3-way relationship of sex, pclass, and survival, compare to analysis of title
+ggplot(data_combined[1:891,], aes(x = sex, fill = survived)) +
+  geom_bar() +
+  facet_wrap(~pclass) + 
+  ggtitle("Pclass") +
+  xlab("Sex") +
+  ylab("Total Count") +
+  labs(fill = "Survived")
+
+###
+#One can see that as we go from the first class to the third there is a trend in females to survive far more likely than males.
+#The odds in first and second class are far better than in the third class. 
+#But for the males that rate of survival is (so to say) dramatically decrease and that in percentage second and third class males
+#have "same" survival rate. But as we saw from the title feature it gives us a better picture in who survives as a male or female.
+###
 
 
+
+
+# - - - age - - - 
 
 ####
 # From the analysis of 'title' variable (misses, mrses, males etc.) we infered that age and sex (as well as some other features!) 
@@ -447,6 +476,58 @@ summary(data_combined[1:891,"age"])
 
 summary(data_combined$age)
 
+
+# Just to be thorough, take a look at survival rates broken out by sex, pclass, and age
+ggplot(data_combined[1:891,], aes(x = age, fill = survived)) +
+  facet_wrap(~sex + pclass) +
+  geom_histogram(binwidth = 10) +
+  xlab("Age") +
+  ylab("Total Count")
+
+####
+#We see in aggregate the confirmation that female tend to have better survival rates than men.
+#For the females there is not so much of a pattern: class_1 vs class_2 they tend mostly to survive.
+#For the class_3 younger ones tend to have better survival rate, and as we increase the number of age their chance of survival decreases.
+#For the males, well class_1 has overall better survival rate than in class_2 and class_3.
+#One can infer that younger pals have a good survival rate.
+#Taking all this into aggregate (females survive better no matter the age + males who are younger tend to have better survival age)
+#we can "confirm" our hypothesis "Women and children first" (all women including the younger ones and young males have good survival rate)
+####
+
+
 ###
 #Now we are gonna check if we can make 'title' as proxy for age!
 ###
+
+# Validate that "Master." is a good proxy for male children
+
+#First we gonna subset all the datapoints with title master...
+boys <- data_combined[which(data_combined$title == "Master."),]
+
+#... and take summary statistics:
+summary(boys$age)
+
+###
+#Statistics are in favour of us and pretty much informative that yes, Master could be a good proxy for male children.
+#Maximum age for the given distribution is 14.5, minimum is 0.33. 75% are less than 9 years old, so one can conclude
+#that there were boys who are relatively young in age. 
+###
+
+###
+#Reflexively, if this is the distribution for "boys" then everything else in general would be "adult males".
+#That's why we are not gonna subset Mr's, but let's take a quick summary to confirm it:
+summary(data_combined[which(data_combined$title == "Mr."),]$age)
+#In general there is a good separation between males of title Master. and Mr., and we are gonna show it
+#using density plots: 
+
+#First we have to 'update' subset of males, since we added new feature 'title'
+males_with_title <- data_combined[which(data_combined$sex == "male"),]
+
+ggplot(males_with_title[males_with_title$title != "Other",], aes(x = age, fill = title)) +
+  geom_density(alpha = 0.5) +
+  xlab("Age") +
+  ylab("Total Count")
+
+#One can see a decently good separation between males of title Master. and Mr.
+
+
