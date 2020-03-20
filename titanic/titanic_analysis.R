@@ -528,6 +528,63 @@ ggplot(males_with_title[males_with_title$title != "Other",], aes(x = age, fill =
   xlab("Age") +
   ylab("Total Count")
 
-#One can see a decently good separation between males of title Master. and Mr.
+#One can see a decently clear separation between males of title Master. and Mr.
+###
 
+####
+#We know that "Miss." is more complicated, let's examine further
+#One can use the same variable name 'misses' in a sense of 'updating' existing variable and thus
+#saving some memory. In order to be no confusion we will use different name for variable.
+####
+
+misses_updated <- data_combined[which(data_combined$title == "Miss."),]
+mrses_updated <- data_combined[which(data_combined$title == "Mrs."),]
+
+summary(misses_updated$age)
+summary(mrses_updated$age)
+
+###
+#One can see that, yes, there is an 'obvious' separation between the titles of Miss-es and Mrs-es.
+#As we observed previously Mrs-es are more "older" in general than Miss-es, but one should expect women that are not married passing some age!
+#It's nothing unusual, one should've expect that. 
+#But the problem would be "how to distinguish female children vs adult non-maried Miss".
+#We see that 25% of the Misses are 15 years or less, and it seems that the data is "skewed" which means that large portion of them are older/adult.
+#Let's plot two density distributions for Miss-es and Mrs-es.
+###
+
+females <- data_combined[which(data_combined$sex == "female"),]
+
+ggplot(females[females$title != "Other",], aes(x = age, fill = title)) +
+  geom_density(alpha = 0.5) +
+  xlab("Age") +
+  ylab("Total Count")
+
+###
+#As we expected, there is no clear separation between those two titles. 
+#One should expect that there are married women to be younger in age ('blue part in red part'), 
+#as well as that there are nonmarried women who are "older" in age.
+#One could make many more inferencies from this density plot, but since this is iterative process I'm not gonna infer anything more.
+#We see that we somehow need to 'extract children' both from Mrs-es and Miss-es.
+#Let's see if other variables could help us with that!
+###
+
+####
+#Sometimes I think that by understanding our data and feature engineering (aka making something explicit) we are helping not only ourselves,
+#but also a ML model so it could make better predictions. Why is then data exploration so boring after all?!
+####
+
+###
+#Enough for motivational messages. Let's see if pclass could help us better separate at least female children from Miss.
+#After all, I forgot to mention that if the "child" is already married, it is no more child. It is an adult. Thats why we don't care for Mrs part of children.
+####
+
+ggplot(misses[misses$survived != "None",], aes(x = age, fill = survived)) +
+  facet_wrap(~pclass) +
+  geom_histogram(binwidth = 5) +
+  ggtitle("Age for 'Miss.' by Pclass") + 
+  xlab("Age") +
+  ylab("Total Count")
+
+####
+#Mainly younger Misses (< or = 20 y.o) are from second and third class. 
 
