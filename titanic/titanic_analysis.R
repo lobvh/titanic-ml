@@ -427,6 +427,9 @@ ggplot(data_combined[1:891,], aes(x = sex, fill = survived)) +
 
 # - - - age - - - 
 
+
+
+
 ####
 # From the analysis of 'title' variable (misses, mrses, males etc.) we infered that age and sex (as well as some other features!) 
 # seem pretty important, and that they might be correlated with title so we will take a closer look.
@@ -587,4 +590,94 @@ ggplot(misses[misses$survived != "None",], aes(x = age, fill = survived)) +
 
 ####
 #Mainly younger Misses (< or = 20 y.o) are from second and third class. 
+#Since we have title of Master that is at max 14.5y.o. we will generalize "female children" as so!
+####
+
+####
+#One of the ways we can distinguish or so to say separate female children from the rest is by using heuristic:
+#"Children don't travel alone, even at this day and age. Especially 18 or less."
+#Let's sift and create misses_alone variable:
+
+misses_alone <- misses_updated[which(misses_updated$sibsp == 0 & misses_updated$parch == 0),]
+summary(misses_alone$age)
+length(which(misses_alone$age <= 14.5))
+
+#We see that 25% of them are 21y.o. or less, and the rest of them is relatively old!
+#Since male children aka Master is assumed to be 14.5y.o. or less we will use same heuristic to distinguish female children.
+#Since there is only 4 of them we can conclude that rest of the misses are children. 
+#We might be wrong, but not that wrong!
+
+misses_rest <- misses_updated[which(misses_updated$sibsp != 0 & misses_updated$parch != 0),]
+
+#We will use "helping-variable" in order to help us make density plot where we could separate misses_alone
+#and misses_rest. 
+
+misses_ph <- rep("Alone", nrow(misses_alone))
+misses_alone_1 <- data.frame(misses_alone, misses_ph)
+
+misses_ph <- rep("Not Alone", nrow(misses_rest))
+misses_rest_1 <- data.frame(misses_rest, misses_ph)
+
+misses_updated_1 <- rbind(misses_alone_1, misses_rest_1)
+
+ggplot(misses_updated_1, aes(x = age, fill = as.factor(misses_ph))) +
+  geom_density(alpha = 0.5) +
+  xlab("Age") +
+  ylab("Total Count") +
+  labs(fill = "Traveling:") +
+  ggtitle("Misses separation")
+
+####
+#If one focuses only on the part 20y.o. and less one can see that our misses_alone is a decent heuristic
+#for separating younger women. Good proportion of graph indicates that there are many younger women who are not traveling alone!
+#Yes, there are other misses who could travel with their friends etc. but I will stick to this. 
+###
+
+
+
+# - - - sibsp - - - 
+
+
+#####
+#Move on to the sibsp variable, summarize the variable
+summary(data_combined$sibsp)
+
+####
+#One can see that median value is 0 which means that 50% of the passangers are traveling without sibling(s) or spouse
+#that mean is so close to the mean which means (pun intended) tendency towards 0 and that the maximum value is 8.
+#Nothing so special in my opinion, and can't conclude any meaningful stuff from this yet.
+#Maybe we should treat it as a factor if there is a reasonable sense number of distinct values for sibsp. 
+#That would imensly help us to make some visualizations.
+####
+length(unique(data_combined$sibsp))
+#7 is of a reasonable size so we will indeed treat it as factor.
+
+data_combined$sibsp <- as.factor(data_combined$sibsp)
+
+####
+#From here we can make many graphs and get many different analysis of what seems resonable from an analysis perspective.
+#One can make analysis relative to any or collection of features. 
+#I don't want to get into rabbit hole concluding that for example maybe it doesn't seem reasonable to look sibsp relative to name in terms of survival rate.
+#Maybe it will help us to extract some features (combination of name and sibsp variable) in the future, but for now I will spare myself of that.
+#I think for example that fare and sibsp have some good correlation and including both features would be redundant. 
+#Since title feature encompasses both sex and age maybe it makes more sense to watch it relative to that, and maybe segment it ("facet wrap it") relative to pclass. 
+
+ggplot(data_combined[1:891,], aes(x = sibsp, fill = survived)) +
+  geom_bar() +
+  facet_wrap(~pclass + title) + 
+  ggtitle("Pclass, Title") +
+  xlab("SibSp") +
+  ylab("Total Count") +
+  ylim(0,300) +
+  labs(fill = "Survived")
+
+####
+#There are predominantly people who travel with 0 or 1 sibsp. That's what summary on sibsp confirmed!
+#Those who travel without sibling or spouse always have the best survival rate. 
+#Women and children first holds water here. 
+#Rich folks survived the most holds the water too.
+#I don't see too much signal here. Might come back for revision!
+####
+
+
 
