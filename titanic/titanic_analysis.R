@@ -680,4 +680,58 @@ ggplot(data_combined[1:891,], aes(x = sibsp, fill = survived)) +
 ####
 
 
+####
+#Not gonna get into too much detail of why it might be intuitive to treat parch as factor. 
+#At least for the sake of visualization it is possible to make some conclusions if parch is factor. 
+###
+
+data_combined$parch <- as.factor(data_combined$parch)
+ggplot(data_combined[1:891,], aes(x = parch, fill = survived)) +
+  geom_bar() +
+  facet_wrap(~pclass + title) + 
+  ggtitle("Pclass, Title") +
+  xlab("ParCh") +
+  ylab("Total Count") +
+  ylim(0,300) +
+  labs(fill = "Survived")
+
+####
+#If you switch in R between plots Pclass, Title vs Sibsp and Pclass, Title vs Parch you can intuit that
+#graphs are pretty similar! I'm gonna argue (I keep switching between them while I'm typing this!) that
+#survival rates for Mr. is the same in first class when sibs=0, but it's quite worse for the ones in second and third class
+#even if data here is a bit skewed toward parch = 0. 
+#Speaking relatively to sibsp = 0 one can see that number of those who survived is the same in parch = 0,
+#but those who perished is increased! 
+#Maybe someone can conclude something out of it. 
+#I might be wrong, but I think making model on parch will yield worse results for males than by using sibsp. 
+####
+
+
+###
+#But maybe if we combine them we will get a feature that is much more expresive! 
+#Combination of those we will call 'family-size'
+###
+
+temp_sibsp <- c(train_set$sibsp, test_set$sibsp) # Since we made
+temp_parch <- c(train_set$parch, test_set$parch) #              these two to be factors, and now we need numbers!
+data_combined$family_size <- as.factor(temp_sibsp + temp_parch + 1) #If parch and sibsp are factors...
+
+####
+#Again, won't argue too much why it might lead us astray to have some connections between name variable for example and new feature we engineered. 
+####
+
+ggplot(data_combined[1:891,], aes(x = family_size, fill = survived)) +
+  geom_bar() +
+  facet_wrap(~pclass + title) + 
+  ggtitle("Pclass, Title") +
+  xlab("family.size") +
+  ylab("Total Count") +
+  ylim(0,300) +
+  labs(fill = "Survived")
+
+###
+#It's much informative in term of "survival trend" among the classes and titles, and maybe even obvious that
+#if you have large family and it might be problem for you to keep everyone around, thus the chances of survival are bad.
+###
+
 
