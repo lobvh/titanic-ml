@@ -1,4 +1,9 @@
 
+####
+#This is based on a Introductory to Data Science with R by David Langer.
+#I've used these to teach myself some concepts, and to further extend Dave's work, so it's not pure copy/paste!
+###
+
 #Setting default working directory every new session.
 
 setwd("~/Desktop/git_projects/titanic-ml/titanic")
@@ -733,5 +738,51 @@ ggplot(data_combined[1:891,], aes(x = family_size, fill = survived)) +
 #It's much informative in term of "survival trend" among the classes and titles, and maybe even obvious that
 #if you have large family and it might be problem for you to keep everyone around, thus the chances of survival are bad.
 ###
+
+
+
+# - - - ticket - - - 
+
+#####
+#Just before we start I want to emphasise something called overfiting. 
+#I would be precise and say "overfiting on training data" since we are building our model based on training data.
+#We could make a model that could be 100% precise, for example "if you are that and that name, you survive/perish" and build a model on top of that.
+#On top of 'name' variables. When we imput some new data (test data) and there is no data with that name in the training set we are ruined.
+#That is why we need a model that GENERALIZES on all training data. So when you see those graphs that map each data point precisely, that is the sign of overfitting. 
+#####
+
+
+####
+#On to the ticket variable. As Dave pointed out, one should get used to write str() for each variable whenever we start analyzing it.
+#It's a shorthand for using str() on a combined dataset.
+####
+str(data_combined$ticket)
+
+####
+#Based on the huge number of levels ticket really isn't a factor variable it is a string, so let's convert it.
+#Then we will show first 50 of them. We could use 'any number'. It's for a sake of giving us a bigger picture aka we will better see pattern
+#if there are relatively high number of data points, especially for this kind of variable. 
+####
+data_combined$ticket <- as.character(data_combined$ticket)
+data_combined$ticket[1:50]
+
+####
+#There's no immediately apparent structure in the data, let's see if we can find some. I saw on the internet that those indicate something but won't delve deep into that.
+#We'll start with taking a look at just the first char for each.
+#It's easy for visualization if there are relatively few (we can make them as factor!)
+#It's not necessarily correct way of extracting feature, or that one should expect something out of it. 
+#This is some 'basic heuristic'. 
+####
+
+ticket_first_char <- ifelse(data_combined$ticket == "", " ", substr(data_combined$ticket,1,1))
+unique(ticket_first_char)
+
+####
+#OK, we can make a factor for analysis purposes and visualize
+###
+
+data_combined$ticket_first_char <- as.factor(ticket_first_char)
+
+
 
 
