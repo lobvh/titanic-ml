@@ -784,5 +784,99 @@ unique(ticket_first_char)
 data_combined$ticket_first_char <- as.factor(ticket_first_char)
 
 
+# First, a high-level plot of the data
+ggplot(data_combined[1:891,], aes(x = ticket_first_char, fill = survived)) +
+  geom_bar() +
+  ggtitle("Survivability by ticket.first.char") +
+  xlab("ticket.first.char") +
+  ylab("Total Count") +
+  ylim(0,350) +
+  labs(fill = "Survived")
+
+
+
+####
+#One might conclude from the plot that since we know that those tickets that start with 1, 2 and 3 might be indicators of pclass.
+#But there are more people in first class that in second:
+table(data_combined$pclass)
+#Maybe those from 4, 5, etc. could be also grouped into first, second and third class in order to confirm previous hypothesis?
+#It's quite a mixed bag of survivability, and we hate overfiting... Might be predictive, but let's drill a bit more!
+####
+
+ggplot(data_combined[1:891,], aes(x = ticket_first_char, fill = survived)) +
+  geom_bar() +
+  facet_wrap(~pclass) + 
+  ggtitle("Pclass") +
+  xlab("ticket.first.char") +
+  ylab("Total Count") +
+  ylim(0,300) +
+  labs(fill = "Survived")
+
+###
+#We can see that majority tickets in each class start with the same number as pclass they are in. 
+#If we put that stack of P on top of 1 in the first class we will have "that amount of people" which
+#further implies that our previous hypothesis is true! That majority of imbalance for first class is "hidding" in the P?
+#There is W in each class, and very few of them. Might indicate some kind of people that are indeed passengers, but maybe some workers or something?
+#There might be some signal here, but I will keep it in back of my head.
+###
+
+####
+# Lastly, see if we get a pattern when using combination of pclass & title
+###
+
+ggplot(data_combined[1:891,], aes(x = ticket_first_char, fill = survived)) +
+  geom_bar() +
+  facet_wrap(~pclass + title) + 
+  ggtitle("Pclass, Title") +
+  xlab("ticket.first.char") +
+  ylab("Total Count") +
+  ylim(0,200) +
+  labs(fill = "Survived")
+
+###
+#Again, this is based just on a frist letter of ticket. Everything matches with our intuition about survivability, but I don't
+#see some patterns that stick out here. Maybe thorough investigation of ticket feature will be more fruitful.
+###
+
+
+
+
+
+
+# - - - fare - - - 
+
+
+
+####
+#Next up - the fares Titanic passengers paid
+####
+
+str(data_combined$fare)
+summary(data_combined$fare)
+length(unique(data_combined$fare))
+
+
+###
+#We can't make it a factor... Too much instances. 
+
+# Can't make fare a factor, treat as numeric & visualize with histogram
+ggplot(data_combined, aes(x = fare)) +
+  geom_histogram(binwidth = 5) +
+  ggtitle("Combined Fare Distribution") +
+  xlab("Fare") +
+  ylab("Total Count") +
+  ylim(0,200)
+
+
+# Let's check to see if fare has predictive power
+ggplot(data_combined[1:891,], aes(x = fare, fill = survived)) +
+  geom_histogram(binwidth = 5) +
+  facet_wrap(~pclass + title) + 
+  ggtitle("Pclass, Title") +
+  xlab("fare") +
+  ylab("Total Count") +
+  ylim(0,50) + 
+  labs(fill = "Survived")
+
 
 
