@@ -858,8 +858,9 @@ length(unique(data_combined$fare))
 
 ###
 #We can't make it a factor... Too much instances. 
+###
 
-# Can't make fare a factor, treat as numeric & visualize with histogram
+###High level overview
 ggplot(data_combined, aes(x = fare)) +
   geom_histogram(binwidth = 5) +
   ggtitle("Combined Fare Distribution") +
@@ -867,8 +868,18 @@ ggplot(data_combined, aes(x = fare)) +
   ylab("Total Count") +
   ylim(0,200)
 
+####
+#There are some folks that haven't paid anything? That could be interesting. 
+#We see that distribution is skewed towards higher end. We should expect that, because majority of folks that were on Titanic were in third class.
+#aka low fares. We confirmed that with median<mean, and also median = 14.454. 
+#There is an outlier up there where fare>500, but further investigation of fare variable will tell us why is that so.
+###
 
-# Let's check to see if fare has predictive power
+
+####
+#Now that we have high level overview, let's see if it's predictive in some sense:
+####
+
 ggplot(data_combined[1:891,], aes(x = fare, fill = survived)) +
   geom_histogram(binwidth = 5) +
   facet_wrap(~pclass + title) + 
@@ -879,4 +890,212 @@ ggplot(data_combined[1:891,], aes(x = fare, fill = survived)) +
   labs(fill = "Survived")
 
 
+####
+#One would expect that rich folks survived more, and indeed that is so. I don't see anything that will cause more than overfitting here, because
+#everytihing matches our previous intuitions in terms of survivability. I will leave fare for now, but it might help me to feature engineer something using it.
+####
 
+
+                ################################################################################################
+                #                               EXPLANATORY DATA ANALYSIS                                      #
+                ################################################################################################
+
+
+####
+#
+#This is the part where we check our intuitions about features, and also test if our feature engineering is worthwhile.
+#I think "all" of the ML algos have explicit or implicit way of providing us with the feature importance. 
+#We need something that is fast (for classification problems!), effective and simple to interpret. 
+#Without worrying too much on hyperparameters. We will leave that fine tuning for the "real" modeling part. 
+#
+#
+#We will use Random Forests here. I wont drill about the algorithm here there is plenty of it on Internet. 
+#In an essence it uses ensemble method of trees and averages loss on each tree. 
+#Each tree gets it bootstraped sample (drawing N samples from training set where N is number of rows in training set).
+#By drawing samples with replacement some of the rows won't be sampled. Those are colled out-of-bag. 
+#Evaluate model on samples that you drawed, test the model on non-sampled (out-of-bag) ones.
+#What confuses most people is when you are evaluating loss on that particular tree OOB sample is HIDDING it's labels.
+#You get the predicted ones, then you compare it with the real labels and calculate loss.
+#Draw samples -> Make model (tree) on them -> Test the model (tree) on OOB by hiding it's labels -> Compare real labels of OOB with predicted ones -> Calculate loss
+#Then you repeat that proces for each tree and compute the average loss. 
+#Now watch out, since you are drawing samples RANDOMLY with replacement some of the OOB's from the first tree won't be OOB on some other trees. 
+#That's why validation on test data is way more accurate of overall accuracy than OOB since each data point from test set has been put
+#through EACH TREE in Random Forest, where some of the OOB samples are not tested on all trees. 
+#There is also (I guess!) a high probability that EACH training sample will be picked in some of the OOB's at least once, so that's why in confusion matrix you will get score for each row.
+#
+#That's a high-overview enough to get you started. I'm not an expert on RF's...
+#
+####
+
+
+
+###
+#Let's import the randomForest library.
+###
+
+library(randomForest)
+
+
+####
+#We will use whole dataset but different features for each Random Forest algorithm. 
+#Note that on combined dataset labels are "1" "0" and "None", where in train dataset we already have preprocessed ones and zeroes. 
+####
+
+RF_LABELS <- as.factor(train_set$survived) #Made it upper-case since it's constant. 
+
+####
+#We said that pclass and title are by far the best predictors. By using idea of Occam's Razor we will train our model just on two features.
+#set.seed() is used for reproducability. Let's just say that it helps drawing the same samples for trees each time we run algo, 
+#and that everything that it's varying are the features we use to train RF model.
+#
+#We set importance to TRUE in order to make feature importance explicit, and ntree is... well I wont philosophise too much about that.
+#500 trees is by default. Probably no matter how big your training data is or how many features you use after 500 trees accuracy pretty much plateus. 
+#And developers decide to make it 500 by default.
+#I think the OOB will be a bit accurate when we use more trees since there is high probability that your OOB samples would be
+#introudced in more trees, but that's just intuition. It might be wrong. And, since RFs are fast few more trees wont ruin time metric here. 
+####
+
+
+rf_train_1 <- data_combined[1:891, c("pclass", "title")]
+
+set.seed(1234)
+random_forest_1 <- randomForest(x = rf_train_1, y = RF_LABELS, importance = TRUE, ntree = 1000)
+random_forest_1
+varImpPlot(random_forest_1) #This one is for PLOTing feature (VARiable) IMPortance
+
+#####
+#So our OOB accuracy is 20.99% which is not bad. Don't get into a trap thinking that this will match Kaggle accuracy.
+#Put a test set into this model and get a submission to Kaggle. 
+#We see that this model is good at predicting "pesimistic results" since class.error for those who perish is around 0.024, but bad at predicting optimistic ones.
+#We need to have in mind that we must minimize both of these errors. Kaggle gives both accuracies the same weight, that is 
+#it cares for percentage of good predicted for those who perish, and for those who survive.
+#Since (here) upper part of confusion matrix represents Predicted values, and horizontal line represents actuall values class.error is calculated as
+#13/536+13 and 174/174+168, which is respectively false positive rate, and true positive rate (sensitivity/recall).
+#Intuitevely, if we want to improve overall class error one of the strategy would be to put as much 13s into 536, and 174s into 168s. 
+#That comes with a price! I think those kind of manipulations are what ROC is preaching: "sacrifising something for something else".
+#####
+
+####
+#We saw that sibsp, parch and family size might be predictable let's see.
+###
+
+
+####
+#Train a Random Forest using pclass, title, & sibsp
+###
+rf_train_2 <- data_combined[1:891, c("pclass", "title", "sibsp")]
+
+set.seed(1234)
+random_forest_2 <- randomForest(x = rf_train_2, y = RF_LABELS, importance = TRUE, ntree = 1000)
+random_forest_2
+varImpPlot(random_forest_2)
+
+####
+#Not only that OOB improved, but also overall error rate! It droped on predicting pessimistic results, but "vastly" improved on predicting ones who survived.
+#Better than random_forest_1. 
+#One of the things I should've mentioned is that by drawing plots of variable importance you see which ones are good, and which ones don't add too much signal. 
+#There is no point of comparing two features, but it seems more meaningful for more than two!
+####
+
+####
+#Train a Random Forest using pclass, title, & parch
+####
+
+
+rf_train_3 <- data_combined[1:891, c("pclass", "title", "parch")]
+
+set.seed(1234)
+random_forest_3 <- randomForest(x = rf_train_3, y = RF_LABELS, importance = TRUE, ntree = 1000)
+random_forest_3
+varImpPlot(random_forest_3)
+
+###
+#One can see that this one has slightly worse OOB than that on sibsp. I would argue that sibsp and parch are similar in nature, and that some
+#values of sibsp is making RF model better. Intuitevely, maybe there is something in the number of siblings or spouses that gives you higher chance of determining surivalism 
+#then by having parent or children. Maybe there is some advantage you can think of: "children are hard to get together especially if you have more of them, parent's are older and thus have less velocity to get to the upper decks"
+#but something grinds my gears since I don't know if random forest intuits this the same way. I'll definetly put some numbers and expect from random forest meaning of life.
+#Would it be a happy choice? Satre doesn't thinks so... 
+###
+
+#####
+#Train a Random Forest using pclass, title, sibsp, parch. 
+#Maybe when we use them in aggregate the RF will intuit groups and see that those with bigger families tend not to survive?
+#####
+
+rf_train_4 <- data_combined[1:891, c("pclass", "title", "sibsp", "parch")]
+
+set.seed(1234)
+random_forest_4 <- randomForest(x = rf_train_4, y = RF_LABELS, importance = TRUE, ntree = 1000)
+random_forest_4
+varImpPlot(random_forest_4)
+
+####
+#Well, seems like our intuition that ML algos pick humane intuitions validate here. The OOB is by far the lowest, and class errors are good. 
+#Since ML algos can "maybe" intuit some things, we will assume that it needs aggregation of sibsp and parch to get a better feeling for "familyness".
+#There is also that part "traveling all alone". Maybe algo doesn't understand what is the total family size.
+####
+
+####
+#Train a Random Forest using pclass, title, & family.size
+####
+
+rf_train_5 <- data_combined[1:891, c("pclass", "title", "family_size")]
+
+set.seed(1234)
+random_forest_5 <- randomForest(x = rf_train_5, y = RF_LABELS, importance = TRUE, ntree = 1000)
+random_forest_5
+varImpPlot(random_forest_5)
+
+####
+#So this gives even better results! We explicitly engineered feature family_size and we see that it helps.
+#Now we will see if that is so, let's also add parch and sibsp separately, and then parch and sibsp together. 
+####
+
+
+####
+#Train a Random Forest using pclass, title, sibsp, & family_size
+####
+rf_train_6 <- data_combined[1:891, c("pclass", "title", "sibsp", "family_size")]
+
+set.seed(1234)
+random_forest_6 <- randomForest(x = rf_train_6, y = RF_LABELS, importance = TRUE, ntree = 1000)
+random_forest_6
+varImpPlot(random_forest_6)
+
+####
+#It got a little worst, but as our intuition is that sibsp is more predictive than parch, let's see if that holds the water!
+####
+
+
+#####
+#Train a Random Forest using pclass, title, parch, & family_size
+#####
+
+rf_train_7 <- data_combined[1:891, c("pclass", "title", "parch", "family_size")]
+
+set.seed(1234)
+random_forest_7 <- randomForest(x = rf_train_7, y = RF_LABELS, importance = TRUE, ntree = 1000)
+random_forest_7
+varImpPlot(random_forest_7)
+
+####
+#Yeah, that might be true.
+#Lastly:
+####
+
+
+#####
+#Train a Random Forest using pclass, title, parch, sibsp & family_size
+#####
+
+rf_train_8 <- data_combined[1:891, c("pclass", "title", "sibsp", "parch", "family_size")]
+
+set.seed(1234)
+random_forest_8 <- randomForest(x = rf_train_8, y = RF_LABELS, importance = TRUE, ntree = 1000)
+random_forest_8
+varImpPlot(random_forest_8)
+
+####
+#Maybe our intuition that RF catches the same one is not necessarily good, and we should prefer simpler model.
+#So far the best results were yielded using random_forest_5
+####
