@@ -1097,5 +1097,107 @@ varImpPlot(random_forest_8)
 
 ####
 #Maybe our intuition that RF catches the same one is not necessarily good, and we should prefer simpler model.
-#So far the best results were yielded using random_forest_5
+#So far the best results were yielded using random_forest_5.
 ####
+
+
+
+
+
+            ################################################################################################
+            #                                      CROSS VALIDATION                                        #
+            ################################################################################################
+
+
+####
+#So, the main idea of this part will be to explain a bit what CV is, and why do we leverage it. 
+#In an essence it gives almost "real" estimate of what one should expect in terms of accuracy of model. 
+#Here we will prove that OOB is not indeed our true estimate of accuracy. We explained why way up there.
+#Let's put our submission to Kaggle:
+
+test_submit_dataframe <- data_combined[892:1309, c("pclass", "title", "family_size")] 
+
+####
+#These are the features we used to train random_forest_5. Now, we will use our RF model to predict values on never before seen data.
+#How good are those predictions will be based on Kaggles estimate.
+####
+
+
+random_forest_5_predictions <- predict(random_forest_5, test_submit_dataframe)
+table(random_forest_5_predictions)
+
+####
+#As we pointed out elsewhere, we might expect such result to "predict" more of those who perished. 
+#We are just checking how much it predicted. 
+####
+
+####
+#Write out a CSV file for submission to Kaggle. Needs to be same format as Kaggle's.
+#If you view in R submit_dataframe you will see there are "extra" row namings, hence row.names = FALSE.
+####
+
+submit_dataframe <- data.frame(PassengerId = rep(892:1309), Survived = random_forest_5_predictions)
+write.csv(submit_dataframe, file = "RF_SUB_20200904_1.csv", row.names = FALSE)
+
+
+####
+#It's pretty obvious how to upload your submission to Kaggle, so I'm gonna skip that part.
+#My submission score is 0.79425 but the OOB predicts that we should score 0.8182. We overfitted the training data.
+####
+
+####
+#Here, caret package uses stratified cross validation.
+#The main idea is a methodology of spliting the data, and iteratively training and testing on all training dataset.
+#Everyone suggestes that 10 fold cross validation repeated 10 times is first step to any ML modeling. 
+#We will start with that. Instead of constantly puting submissions to Kaggle and checking score, and the fact you only have 5 sumbissions per day
+#we need to find some methodology to calibrate our results localy. We use CV for that. The main idea is to calibrate our score of random_forest_5 
+#to the point of Kaggle's prediction for this score, that is 0.79426. Everything else is shooting in dark. 
+#
+#As Dave puts:
+#"When Kaggle competitions close the final results are calculated using a private data set that is different than either
+#the training and test data that is provided publicly. Given that you submit only your predictions to the Kaggle web site, 
+#Kaggle cannot know what features you used to build your model. While I've never researched how exactly Kaggle does this, there has to be a model(s) that they use that translate the patterns of your model's performance on the test data set to performance on the private data."
+####
+
+####
+#To leverage the CV methodology we will use doSnow for parallel processing, and caret for creating folds.
+####
+
+
+library(caret)
+library(doSNOW)
+
+
+####
+#We will start with the 10-fold-stratified-CV, repeated 10 times. To put it simply: "Shuffle the training set and make me 10 stratified folds, each fold containing 1/10 of the training data.
+#Stratified means that each fold is ballanced and to have "same number" of those who survived and those who perished.
+#Imagine that you have 9 folds for training where the 10th one is only with those who survived.
+#If you are a bit towards math you will see that 9 separate folds with same percentage of survived/perished will in aggregation yield same percentage.
+#Why should 10th one be with the same percentage? Well, that one which is used in the holdout set will be included in the training in the next 9 folds, so we have to keep it the same percentage.
+#Enough philosophy. If you are curious you can search the Internet for what satisfies your inner "I want to understand."
+#I just want to mention that stratification is used for making sure that there are no "hidden features in data", thats why we need to balance it. 
+#Repeated 10 times will induce even more randomization aka "trying all the possible ways of making test and training data, to ensure higher accuracy"
+####
+
+
+set.seed(2348)
+cv_10_folds <- createMultiFolds(RF_LABELS, k = 10, times = 10)
+
+#Check stratification
+table(RF_LABELS)
+342 / 549
+
+table(RF_LABELS[cv_10_folds[[33]]])
+308 / 494
+
+# Set up caret's trainControl object per above.
+ctrl_1 <- trainControl(method = "repeatedcv", number = 10, repeats = 10,
+                       index = cv_10_folds)
+
+
+####
+#At this stage check my detecting_cores.r file I've included to check how many aviable cores and threads you have to use.
+#I'm not responsible for any damage.
+###
+
+
