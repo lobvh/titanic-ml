@@ -983,6 +983,7 @@ varImpPlot(random_forest_1) #This one is for PLOTing feature (VARiable) IMPortan
 ####
 #Train a Random Forest using pclass, title, & sibsp
 ###
+
 rf_train_2 <- data_combined[1:891, c("pclass", "title", "sibsp")]
 
 set.seed(1234)
@@ -1199,5 +1200,126 @@ ctrl_1 <- trainControl(method = "repeatedcv", number = 10, repeats = 10,
 #At this stage check my detecting_cores.r file I've included to check how many aviable cores and threads you have to use.
 #I'm not responsible for any damage.
 ###
+
+###
+#Create cluster of child processes, and "register" them
+###
+cluster_1 <- makeCluster(6, type = "SOCK")
+registerDoSNOW(cluster_1)
+
+###
+#Set seed for reproducability and train RF algorithm on the same dataset, with the same features as random_forest_5 via using cross-validation
+###
+set.seed(34324)
+rf_5_cv_1 <- train(x = rf_train_5, y = RF_LABELS, method = "rf", tuneLength = 3,
+                   ntree = 1000, trControl = ctrl_1)
+
+###
+#Shutdown cluster after it finishes 
+###
+stopCluster(cluster_1)
+
+###
+#Check out results 
+###
+
+rf_5_cv_1
+
+###
+#We see that the best accuracy is using mtry=2. that is 0.8105179. Our random_forest_5 accuracy is 81.82, and our Kaggle accuracy
+#is 0.79425. So, our CV score is a bit more optimistic, and we see that RF is also overfitting. 
+#We are training on 90% of data and evaluating our test on 10% of data. Maybe the problem is in having too much data for our RF, aka RF is more prone to overfit then on less data.
+#That beign said, we will try to train our RF on less data using 5-fold CV repeated 10 times. 
+#Same code again, I won't drain it. 
+###
+
+
+####
+#5-folds cross-validation
+####
+set.seed(5983)
+cv_5_folds <- createMultiFolds(RF_LABELS, k = 5, times = 10)
+
+ctrl_2 <- trainControl(method = "repeatedcv", number = 5, repeats = 10,
+                       index = cv_5_folds)
+
+
+cluster_1 <- makeCluster(6, type = "SOCK")
+registerDoSNOW(cluster_1)
+
+set.seed(89472)
+rf_5_cv_2 <- train(x = rf_train_5, y = RF_LABELS, method = "rf", tuneLength = 3,
+                   ntree = 1000, trControl = ctrl_2)
+
+stopCluster(cluster_1)
+
+
+rf_5_cv_2
+
+###
+#Now our best accuracy is 0.8134652 which is quite "worse" then those obtained from 10-fold CV.
+#We expected it to be more pessimistic. So finally, we will use the heuristic which is used by some Kagglers:
+#Make such CV where folds mimics percentage of the training vs test set on complete dataset. 
+#Here is around 1/3, that is 2/3 is training set and 1/3 is test set. So, we will do 3-fold cross validation.
+###
+
+
+####
+#3-folds cross-validation
+####
+set.seed(37596)
+cv_3_folds <- createMultiFolds(RF_LABELS, k = 3, times = 10)
+
+ctrl_3 <- trainControl(method = "repeatedcv", number = 3, repeats = 10,
+                       index = cv_3_folds)
+
+
+cluster_1 <- makeCluster(6, type = "SOCK")
+registerDoSNOW(cluster_1)
+
+set.seed(94622)
+rf_5_cv_3 <- train(x = rf_train_5, y = RF_LABELS, method = "rf", tuneLength = 3,
+                   ntree = 1000, trControl = ctrl_3)
+
+stopCluster(cluster_1)
+
+
+rf_5_cv_3
+
+#### 
+# So far:
+# rf_5_cv_10 -> 0.8105179
+# rf_5_cv_5 -> 0.8123434
+# rf_5_cv_3 -> 0.8139169 
+#Dave had the worst score on rf_5_cv_3 and he expected that, I'm gonna stick with the same one also.
+#Maybe in this particular case it yields these scores but in future they will be "better". 
+#Since I'm using 3-fold CV I will be wrong, or should I say I expect that whenever I have score it will be wrong 0.8139169 - 0.79425 = 0.0196669
+#That is, my score minus 0.0196669 should be the Kaggle one. You guess that if one gets score that is less than Kaggles it's the other way around. 
+####
+
+####
+#Okay, so far we have seen that we might be overfitting our data. It is confirmed also with 10,5 and 3-fold CV, since all of them are smaller than Kaggle's.
+#We should turn ourselves into inspecting where the algorithm might overfit. 
+#We can't do that with Random Forests since they are only showing us the feature importance, and all the trees in AGGREGATION.
+#
+#Remember, mtry is a variable which says "try mtry features per tree to split the nodes", which makes some trees use minimum 1 and maximum all features.
+#There might be some trees that use all the features (since there are 1000 trees!) "pclass", "title" and "family_size".
+#We can train a single tree with all 3 features and inspect what RF is learning after all.
+#Don't be overwhelmed if you see that decision tree has better accuracy than our RF algo. That's why RF are used. 
+#To train a bunch of trees and average their score, because decision trees are very prone to learning unique characteristics of given training data. 
+#So, after all decision trees are easier to understand. 
+####
+
+####
+#To train decesion trees we need rpart, so we are gonna import those libraries.
+####
+
+library(rpart)
+library(rpart.plot)
+
+
+
+
+
 
 
