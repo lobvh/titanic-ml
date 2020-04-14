@@ -1308,6 +1308,7 @@ rf_5_cv_3
 #Don't be overwhelmed if you see that decision tree has better accuracy than our RF algo. That's why RF are used. 
 #To train a bunch of trees and average their score, because decision trees are very prone to learning unique characteristics of given training data. 
 #So, after all decision trees are easier to understand. 
+#Random forests also mitigate variance of each tree trained, and since they are averaging the results of each tree give good estimation of overall accuracy. 
 ####
 
 ####
@@ -1317,9 +1318,132 @@ rf_5_cv_3
 library(rpart)
 library(rpart.plot)
 
+####
+#This is sort of like 'reverse engineering'. We will see that not only that tree will train on all the features we give it,
+#but will also 'drop' ones that don't have too much information, which is better than RF's feature importance.
+#Since 'if you repeat same stuff again, you should write a function' holds, we will make one for training trees.
+####
 
 
+rpart.cv <- function(seed, training, labels, ctrl) {
+  cl <- makeCluster(6, type = "SOCK")
+  registerDoSNOW(cl)
+  
+  set.seed(seed)
+  
+  # Leverage formula interface for training
+  rpart.cv <- train(x = training, y = labels, method = "rpart", tuneLength = 30, 
+                    trControl = ctrl)
+  
+  #Shutdown cluster
+  stopCluster(cl)
+  
+  return (rpart.cv)
+}
 
 
+####
+#Let's grab the 'most promising features' to inspect what got wrong, and what are the potential causes of overfitting. 
+####
+
+features <- c("pclass", "title", "family_size")
+rpart.train.1 <- data_combined[1:891, features]
+
+# Run CV and check out results
+rpart.1.cv.1 <- rpart.cv(94622, rpart.train.1, RF_LABELS, ctrl_3)
+rpart.1.cv.1
+
+####
+#We obtained the accuracy of 0.8210999 on this model. 
+#Compared to random forest model with the same parameters (0.8139169) we are better. But this is expected, since we are training decision tree.
+
+####
+#Let's plot the decision tree:
+####
+prp(rpart.1.cv.1$finalModel, type = 0, extra = 1, under = TRUE)
+
+####
+#One can see from the tree where there might be problems. Some of the 'hypotheses' are also valid so things like
+#'Have title of Miss, Mr., or Master. not and being in class 3 means that you will survive. 
+#But the decision tree intuited that if you are in pclass=3 it depends on your family size weather you survived or not.
+#Since family_size = 5,6,8,11 is a bit too specific that might be overfitting, and we should concentrate on that part to improve it.
+#Having the title Mr and Other means that you will die around 80% of time. 
+#There might be some women in title Other so we will investigate that in order to put everyone in the same basket.
+#We know that title of Mr. have better survival rate at first class, so we also might improve that.
+#
+#So not only that tree's help us seeing where we might overfit, but also where we might improve our model.
+#Intuitevely, if we find such subset of features to improve single tree, we are also gonna improve our overall model.
+#So, using trees is a bit of a 'improve single, to improve overall'. 
+###
+
+################################################################################################
+#                             FIXING THE TITLE VARIABLE                                        #
+################################################################################################
+
+####
+#Parse out last name and title:
+#Based on how 'name' variable look we need to find a way to extract the title variable properly.
+####
+data_combined[1:25, "name"]
+
+name.splits <- str_split(data_combined$name, ",")
+name.splits[1]
+
+####
+#This might be a nice place to extract last name title, which might be used later. 
+####
+
+last.names <- sapply(name.splits, "[", 1)
+last.names[1:10]
+data.combined$last.name <- last.names
+
+####
+#Here we are gonna extract titles. 
+####
+
+name.splits <- str_split(sapply(name.splits, "[", 2), " ")
+titles <- sapply(name.splits, "[", 2)
+unique(titles)
+
+####
+#We see that some of the 'new' titles we havent seen might be indicative of nobility, and hence people who are rich.
+#Using the experience of Google you can get the idea of why one would aggregate these variables as such:
+####
+
+# What's up with a title of 'the'?
+data_combined[which(titles == "the"),]
+
+# Re-map titles to be more exact
+titles[titles %in% c("Dona.", "the")] <- "Lady."
+titles[titles %in% c("Ms.", "Mlle.")] <- "Miss."
+titles[titles == "Mme."] <- "Mrs."
+titles[titles %in% c("Jonkheer.", "Don.")] <- "Sir."
+titles[titles %in% c("Col.", "Capt.", "Major.")] <- "Officer"
+table(titles)
+
+# Make title a factor
+data_combined$new.title <- as.factor(titles)
+
+# Visualize new version of title
+ggplot(data_combined[1:891,], aes(x = new.title, fill = survived)) +
+  geom_bar() +
+  facet_wrap(~ pclass) + 
+  ggtitle("Surival Rates for new.title by pclass")
+
+####
+#We see that yeah, these folks wiht title of Dr. etc. are more correlated with those that are in higher classes. 
+#We have already decided that Ms, Mile are Miss, and Mme. is Mr. 
+#From this plot based on relative survival rate we can put into the same basket other 
+#nobility titles. 
+
+# Collapse titles based on visual analysis
+indexes <- which(data.combined$new.title == "Lady.")
+data_combined$new.title[indexes] <- "Mrs."
+
+indexes <- which(data_combined$new.title == "Dr." | 
+                 data_combined$new.title == "Rev." |
+                 data_combined$new.title == "Sir." |
+                 data_combined$new.title == "Officer")
+data_combined$new.title[indexes] <- "Mr."
 
 
