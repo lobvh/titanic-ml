@@ -1,6 +1,6 @@
 
 ####
-#This is based on a Introductory to Data Science with R by David Langer.
+#This is based on a 'Introductory to Data Science with R' by David Langer.
 #I've used these to teach myself some concepts, and to further extend Dave's work, so it's not pure copy/paste!
 ###
 
@@ -1433,11 +1433,13 @@ ggplot(data_combined[1:891,], aes(x = new.title, fill = survived)) +
 ####
 #We see that yeah, these folks wiht title of Dr. etc. are more correlated with those that are in higher classes. 
 #We have already decided that Ms, Mile are Miss, and Mme. is Mr. 
-#From this plot based on relative survival rate we can put into the same basket other 
+#From this plot, based on relative survival rate, we can put into the same basket other 
 #nobility titles. 
 
-# Collapse titles based on visual analysis
-indexes <- which(data.combined$new.title == "Lady.")
+####
+#Collapse titles based on visual analysis
+####
+indexes <- which(data_combined$new.title == "Lady.")
 data_combined$new.title[indexes] <- "Mrs."
 
 indexes <- which(data_combined$new.title == "Dr." | 
@@ -1447,3 +1449,157 @@ indexes <- which(data_combined$new.title == "Dr." |
 data_combined$new.title[indexes] <- "Mr."
 
 
+#####
+#Visualize the final result to check if everything is correct:
+#####
+
+ggplot(data_combined[1:891,], aes(x = new.title, fill = survived)) +
+  geom_bar() +
+  facet_wrap(~ pclass) +
+  ggtitle("Surival Rates for Collapsed new.title by pclass")
+
+#####
+#Since we made new.title variable, we will now train decision tree based on it to check 
+#if our intuition about "improving" accuracy is any good.
+#####
+features <- c("pclass", "new.title", "family_size")
+rpart.train.2 <- data_combined[1:891, features]
+
+# Run CV and check out results
+rpart.2.cv.1 <- rpart.cv(94622, rpart.train.2, RF_LABELS, ctrl_3)
+rpart.2.cv.1
+
+####
+#0.8285073 > 0.8210999, let's check how the decision tree splited the data.
+####
+
+# Plot
+prp(rpart.2.cv.1$finalModel, type = 0, extra = 1, under = TRUE)
+
+
+####
+#Compared to the previous tree we see that some of the "females" found in previous tree in "Others"
+#is now got into right bucket. But we see that everything remains the same: family_size is overspecific, and Mr. are still "unlucky".
+####
+
+
+################################################################################################
+#                             TRYING TO FIND THOSE MR-S WHO SURVIVED                           #
+################################################################################################
+
+######
+#Dive in on 1st class "Mr.". We know that those in first class should have a higher survival rate...
+#####
+indexes.first.mr <- which(data_combined$new.title == "Mr." & data_combined$pclass == "1")
+first.mr.df <- data_combined[indexes.first.mr, ]
+summary(first.mr.df)
+
+####
+#One female? Let's check that out.
+####
+first.mr.df[first.mr.df$sex == "female",]
+
+####
+#We presumed that those with title of Dr. are ought to be males, mainly...
+####
+
+# Update new.title feature
+indexes <- which(data_combined$new.title == "Mr." & 
+                   data_combined$sex == "female")
+data_combined$new.title[indexes] <- "Mrs."
+
+# Any other gender slip-ups?
+length(which(data_combined$sex == "female" & 
+               (data_combined$new.title == "Master." |
+                  data_combined$new.title == "Mr.")))
+
+# Refresh data frame
+indexes.first.mr <- which(data_combined$new.title == "Mr." & data_combined$pclass == "1")
+first.mr.df <- data_combined[indexes.first.mr, ]
+
+# Let's look at surviving 1st class "Mr."
+summary(first.mr.df[first.mr.df$survived == "1",])
+View(first.mr.df[first.mr.df$survived == "1",])
+
+#####
+#The distribution of fare amongst males who were in first class is fairly variable. 
+####
+
+# Take a look at some of the high fares
+indexes <- which(data_combined$ticket == "PC 17755" |
+                   data_combined$ticket == "PC 17611" |
+                   data_combined$ticket == "113760")
+View(data_combined[indexes,])
+
+####
+#One may intuit that we can now form "groups" based on the ticket feature, and based on that 
+#that those fares need to be corrected. They are same here, but one would not expect that each group member will pay the same amount of money.
+#To find in proportion how much each of the family member "share" as an average Dave used the 'normal' average of fare per group where each member of family is weighted the same. 
+#Since all "ML" is around the idea "learning weights and biases", I thought, well there may be some algorithm that will learn proper weights (and biases?)
+#that will make fare more realistic. 
+#I also asked the question if that is reasonable, so follow it up:
+# https://www.kaggle.com/c/titanic/discussion/143678
+#Because here I will use "normal" average. 
+####
+
+# Visualize survival rates for 1st class "Mr." by fare
+ggplot(first.mr.df, aes(x = fare, fill = survived)) +
+  geom_density(alpha = 0.5) +
+  ggtitle("1st Class 'Mr.' Survival Rates by fare")
+
+####
+#As I've pointed out earlier, when we use density plots we are mainly looking for the "clean separations". 
+#We see that those who didn't survive where the fare is >200 we expected those kind of folks to "live",
+#and since there is not so much Mr's who survived with the fare >500, fare may not be helpful in finding first class Mr's who survived.
+####
+
+####
+#Okay, we will engineer features based on all the passengers with the same ticket: use "proper fare" and make new feature
+#which will be indicative of "group size". We will see if that might be predictive.
+####
+
+ticket.party.size <- rep(0, nrow(data_combined))
+avg.fare <- rep(0.0, nrow(data_combined))
+tickets <- unique(data_combined$ticket)
+
+for (i in 1:length(tickets)) {
+  current.ticket <- tickets[i]
+  party.indexes <- which(data_combined$ticket == current.ticket)
+  current.avg.fare <- data_combined[party.indexes[1], "fare"] / length(party.indexes)
+  
+  for (k in 1:length(party.indexes)) {
+    ticket.party.size[party.indexes[k]] <- length(party.indexes)
+    avg.fare[party.indexes[k]] <- current.avg.fare
+  }
+}
+
+data_combined$ticket.party.size <- ticket.party.size
+data_combined$avg.fare <- avg.fare
+
+# Refresh 1st class "Mr." dataframe
+first.mr.df <- data_combined[indexes.first.mr, ]
+summary(first.mr.df)
+
+####
+#Looking at the summary of new features we see that 75% of Mr-s in first class had group size less than 2. 
+#We might expect that data is now slightly skewed based on avg.fare, but there are also outliers.
+#Let's visualize Mr's with new features to see if they might help us with the separations.
+####
+
+
+# Visualize new features
+ggplot(first.mr.df[first.mr.df$survived != "None",], aes(x = ticket.party.size, fill = survived)) +
+  geom_density(alpha = 0.5) +
+  ggtitle("Survival Rates 1st Class 'Mr.' by ticket.party.size")
+
+ggplot(first.mr.df[first.mr.df$survived != "None",], aes(x = avg.fare, fill = survived)) +
+  geom_density(alpha = 0.5) +
+  ggtitle("Survival Rates 1st Class 'Mr.' by avg.fare")
+
+####
+#Concerning the survival rates by ticket.party.size we see some blips apart from some regions (intervals) where based on the relative
+#area there might be more of those who survived than those who don't and vice versa.
+#Concerning the sruvival rates by avg.fare there is a nice "blip" in the region where avg.fare is between 25 and 30ish.
+#The area for those who survied is much higher and narrower than those who died. 
+#We know from statistics that narrower the distribution is, the measurment is "precise". 
+####
