@@ -1599,7 +1599,198 @@ ggplot(first.mr.df[first.mr.df$survived != "None",], aes(x = avg.fare, fill = su
 ####
 #Concerning the survival rates by ticket.party.size we see some blips apart from some regions (intervals) where based on the relative
 #area there might be more of those who survived than those who don't and vice versa.
+#Since ticket party size = 1 is indicative here of man traveling alone we see that relative good amount of an area (survived + perished)
+#is skewed towards that. 
+#
 #Concerning the sruvival rates by avg.fare there is a nice "blip" in the region where avg.fare is between 25 and 30ish.
 #The area for those who survied is much higher and narrower than those who died. 
 #We know from statistics that narrower the distribution is, the measurment is "precise". 
+#That is also indicative of man traveling alone, apart from the last graph.
+####
+
+#####
+#Since we now have a 'realistic view' of average fare (we 'fixed' the fare), and in aggregation with the last two graphs one might intuit that NOW there might be a high correlation between that and ticket party size!
+#So, let's check that up. If that is so, one of the features is redundant and can obscure our modeling by adding extra noise.
+#####
+
+# Hypothesis - ticket.party.size is highly correlated with avg.fare
+summary(data_combined$avg.fare)
+
+####
+#We have one missing value, we should impute it simply by imputing it with median of other persons with the same characteristics.
+####
+data_combined[is.na(data_combined$avg.fare), ]
+
+# Get records for similar passengers and summarize avg.fares
+indexes <- with(data_combined, which(pclass == "3" & title == "Mr." & family_size == 1 &
+                                       ticket != "3701"))
+similar.na.passengers <- data_combined[indexes,]
+summary(similar.na.passengers$avg.fare)
+
+# Use median since close to mean and a little higher than mean
+data_combined[is.na(avg.fare), "avg.fare"] <- 7.840
+
+
+####
+#Leverage caret's preProcess function to normalize data before doing correlation.
+####
+
+preproc.data.combined <- data_combined[, c("ticket.party.size", "avg.fare")]
+preProc <- preProcess(preproc.data.combined, method = c("center", "scale")) #This is similar like trainControl. "Explain how you gonna train me?"
+
+postproc.data.combined <- predict(preProc, preproc.data.combined) # "Use the preProc way of preprocessing on preproc.data.combined"
+
+####
+#Hypothesis refuted for ALL the data. In terms of ALL the data, they are not highly correlated. But maybe they are for the first class...
+#We now know that we have two new features that we can explore!
+####
+cor(postproc.data.combined$ticket.party.size, postproc.data.combined$avg.fare)
+
+# How about for just 1st class all-up? That may help us with the males from the first class.
+indexes <- which(data_combined$pclass == "1")
+cor(postproc.data.combined$ticket.party.size[indexes], 
+    postproc.data.combined$avg.fare[indexes])
+
+####
+#Hypothesis refuted again. 
+###
+
+####
+#OK, let's see if our feature engineering has made any difference
+####
+
+features <- c("pclass", "new.title", "family_size", "ticket.party.size", "avg.fare")
+rpart.train.3 <- data_combined[1:891, features]
+
+# Run CV and check out results
+rpart.3.cv.1 <- rpart.cv(94622, rpart.train.3, RF_LABELS, ctrl_3)
+rpart.3.cv.1
+
+# Plot
+prp(rpart.3.cv.1$finalModel, type = 0, extra = 1, under = TRUE)
+
+
+#####
+#First of all we see that our accuracy improved, and as we look at the decision tree we also expect that it is not pessimistc at all!
+#We should expect better score at Kaggle with this one! Our new features haven't helped us with the title of Mr., but it got rid of redundant variable family_size which 
+#overfitted our model. Considering ticket_party_size>=5 and average_fare >= 8 in third class decision tree intuited what we have already know that makes sense:
+#If you have a group of more people in third class it was maybe hard for you to organize, and also people in same groups tend to have similar surviving rate on average so we should base our decision on that.
+#Not only that it was hard to organize/gather your family, it would also make less inertia to go to the life boats.
+#Thing with the average fare is a little shady to me, because it intuit that if you have bigger average fare you perished, and smaller that you survived.
+#Considering that those are people in third class, we might expect that it might be the case that those with bigger fares have greater commodity, but maybe most of them are the ones that have bigger families.
+#####
+
+#####
+#So, overall accuracy on single tree is 0.8371493. I will now drop the family_size and then avg.fare, just to see what happens.
+#####
+
+
+features <- c("pclass", "new.title", "ticket.party.size", "avg.fare")
+rpart.train.4 <- data_combined[1:891, features]
+
+# Run CV and check out results
+rpart.4.cv.1 <- rpart.cv(94622, rpart.train.4, RF_LABELS, ctrl_3)
+rpart.4.cv.1
+
+# Plot
+prp(rpart.4.cv.1$finalModel, type = 0, extra = 1, under = TRUE)
+
+####
+#Everything is the same, but accuracy got even better! 0.8432099! Let's try one with ticket.party.size, and one with avg.fare.
+####
+
+######
+#Droping ticket.party.size. It got worse. 0.8141414 
+######
+
+features <- c("pclass", "new.title", "avg.fare")
+rpart.train.5 <- data_combined[1:891, features]
+
+# Run CV and check out results
+rpart.5.cv.1 <- rpart.cv(94622, rpart.train.5, RF_LABELS, ctrl_3)
+rpart.5.cv.1
+
+# Plot
+prp(rpart.5.cv.1$finalModel, type = 0, extra = 1, under = TRUE)
+
+
+######
+#Droping avg.fare. It got a bit better, but not that better 0.8359147.
+######
+
+features <- c("pclass", "new.title", "ticket.party.size")
+rpart.train.6 <- data_combined[1:891, features]
+
+# Run CV and check out results
+rpart.6.cv.1 <- rpart.cv(94622, rpart.train.6, RF_LABELS, ctrl_3)
+rpart.6.cv.1
+
+# Plot
+prp(rpart.6.cv.1$finalModel, type = 0, extra = 1, under = TRUE)
+
+
+########
+#I will train a RandomForest model with 3-fold-CV on that one without family.size and put my submission to Kaggle.
+########
+
+rf_train_5_v2 <- data_combined[1:891, c("pclass", "new.title", "ticket.party.size", "avg.fare")]
+
+cluster_1 <- makeCluster(6, type = "SOCK")
+registerDoSNOW(cluster_1)
+
+set.seed(237656)
+rf_5_cv_3_v2 <- train(x = rf_train_5_v2, y = RF_LABELS, method = "rf", tuneLength = 3,
+                   ntree = 1000, trControl = ctrl_3)
+
+stopCluster(cluster_1)
+
+
+rf_5_cv_3_v2
+
+
+
+test_submit_dataframe <- data_combined[892:1309, c("pclass", "new.title", "ticket.party.size", "avg.fare")] 
+
+random_forest_5_v2_predictions <- predict(rf_5_cv_3_v2, test_submit_dataframe)
+table(random_forest_5_v2_predictions)
+
+
+submit_dataframe <- data.frame(PassengerId = rep(892:1309), Survived = random_forest_5_v2_predictions)
+write.csv(submit_dataframe, file = "RF_SUB_20201704_1.csv", row.names = FALSE)
+
+
+####
+#This one got me almost the same score. Let me try with 10-fold cross-validation.
+####
+
+
+
+rf_train_5_v3 <- data_combined[1:891, c("pclass", "new.title", "ticket.party.size", "avg.fare")]
+
+cluster_1 <- makeCluster(6, type = "SOCK")
+registerDoSNOW(cluster_1)
+
+set.seed(828282)
+rf_5_cv_10_v3 <- train(x = rf_train_5_v3, y = RF_LABELS, method = "rf", tuneLength = 3,
+                      ntree = 1000, trControl = ctrl_1)
+
+stopCluster(cluster_1)
+
+
+rf_5_cv_3_v2
+
+
+
+test_submit_dataframe <- data_combined[892:1309, c("pclass", "new.title", "ticket.party.size", "avg.fare")] 
+
+random_forest_5_v3_predictions <- predict(rf_5_cv_10_v3, test_submit_dataframe)
+table(random_forest_5_v3_predictions)
+
+
+submit_dataframe <- data.frame(PassengerId = rep(892:1309), Survived = random_forest_5_v3_predictions)
+write.csv(submit_dataframe, file = "RF_SUB_20201704_2.csv", row.names = FALSE)
+
+
+#####
+#Same place.... :'(
 ####
