@@ -1794,3 +1794,358 @@ write.csv(submit_dataframe, file = "RF_SUB_20201704_2.csv", row.names = FALSE)
 #####
 #Same place.... :'(
 ####
+
+#####
+#Aparently I screwed something up along the line, thats why I'm getting 'bad scores'. 
+#I'm gonna do my modeling in separate file from now on, since I see there might be a lot of mistakes everything being in one single file. 
+#It's probably because I run this code all at once once I start new session, and it probably picked up last 'features' variable. 
+#I think that might be potential bug!
+####
+
+#####
+#To wrap this up I'm gonna finish up with some extra bits I've learned from Dave, and then in separate file I'm gonna play 
+#with possibly testing something from here, and putting XGBoost into practise for the sake of improving score on the leaderboard.
+#Two of the things Dave introduced are "mutual information" and using Rtsne package to project our high dimensional data into lower dimensions.
+#From that we can beter inspect and intuit "why" our model would make some boundaries and possibly see if we can use those low-dimensional data as extra features so our
+#model can use them to make better groupings. 
+#####
+
+
+
+
+
+####
+#Process of using mutual information is, for me, source of confirmation that our data analysis and ispection is correct.
+#In an essenxe 'given survival labels how informative our feature is in predicting that'.
+#Since it only works with discrete variables, some of the continous ones we will covert into discrete. 
+####
+
+library(infotheo)
+
+mutinformation(RF_LABELS, data_combined$pclass[1:891])
+mutinformation(RF_LABELS, data_combined$sex[1:891])
+mutinformation(RF_LABELS, data_combined$sibsp[1:891])
+mutinformation(RF_LABELS, data_combined$parch[1:891])
+mutinformation(RF_LABELS, discretize(data_combined$fare[1:891]))
+mutinformation(RF_LABELS, data_combined$embarked[1:891])
+mutinformation(RF_LABELS, data_combined$title[1:891])
+mutinformation(RF_LABELS, data_combined$family_size[1:891])
+mutinformation(RF_LABELS, data_combined$ticket.first.char[1:891])
+mutinformation(RF_LABELS, data_combined$cabin.multiple[1:891])
+mutinformation(RF_LABELS, data_combined$new.title[1:891])
+mutinformation(RF_LABELS, data_combined$ticket.party.size[1:891])
+mutinformation(RF_LABELS, discretize(data_combined$avg.fare[1:891]))
+
+
+####
+#Now we see what we already intuited, that those four features we used in aggregation are 'highly informative'.
+#Let's now project data from 4D (4 features we used to make "the best" model) to 2D and see if we can intuit something out of it!
+####
+
+###
+#We are gonna first look at the subset of data where the model got everything "right".
+#Since 451/451+86 is accuracy for title of Mr. there is a room for improvement in accuracy there!
+###
+
+library(Rtsne)
+most_correct <- data_combined[data_combined$new.title != "Mr.",]
+indexes <- which(most_correct$survived != "None")
+
+
+set.seed(984357)
+tsne.1 <- Rtsne(most.correct[, features], check_duplicates = FALSE)
+ggplot(NULL, aes(x = tsne.1$Y[indexes, 1], y = tsne.1$Y[indexes, 2], 
+                 color = most.correct$survived[indexes])) +
+  geom_point() +
+  labs(color = "Survived") +
+  ggtitle("tsne 2D Visualization of Features for new.title Other than 'Mr.' (females and boys!) ")
+
+####
+# To get a baseline, let's use conditional mutual information on the tsne X and
+# Y features for females and boys in 1st and 2nd class. The intuition here is that
+# the combination of these features should be higher than any individual feature
+# we looked at above, because these 2 features are aggregation of 4 features. 
+# Conditional information says "If we have 2 features in aggregation how much more is model predictive."
+# "How cleanly those blueish spots are separated from red ones"
+####
+condinformation(most.correct$survived[indexes], discretize(tsne.1$Y[indexes,]))
+
+####
+#As we expected it is relatively high. 
+####
+
+####
+# As  we know the new.title and pclass are the "most highly predictable" let's compare their conditional information
+# with the previous one we calculated! Are they better at separating?
+####
+
+condinformation(RF_LABELS, data_combined[1:891, c("new.title", "pclass")])
+
+####
+#It's lower, so it makes sense since 4 ones (projected on 2D!) provide more information in aggregation than new.title and pclass in aggregation!
+####
+
+
+####
+#Lastly, we will take a look at the subset of title of Mr., to see if it can explain why is there "no" possibility to make 
+#good prediction based on given data for title or Mr.
+####
+misters <- data_combined[data_combined$new.title == "Mr.",]
+indexes <- which(misters$survived != "None")
+
+set.seed(984357)
+tsne.2 <- Rtsne(misters[, features], check_duplicates = FALSE)
+ggplot(NULL, aes(x = tsne.2$Y[indexes, 1], y = tsne.2$Y[indexes, 2], 
+                 color = misters$survived[indexes])) +
+  geom_point() +
+  labs(color = "Survived") +
+  ggtitle("tsne 2D Visualization of Features for new.title of 'Mr.'")
+
+
+####
+#We see that there are a litttttlle bit of clusters where there we will expect some boundaries to be put by randomForest model.
+#and there are a lot of those clusters where that isn't the case. Almost everything is 'redish'. And the places where there is some 'survived fellas' 
+#there is not even '50/50' region where you can cluster them.
+####
+
+
+
+# Now conditional mutual information for tsne features for adult males
+condinformation(misters$survived[indexes], discretize(tsne.2$Y[indexes,]))
+
+####
+#We see that predicting survivability of Mr's (recall subset of indexes for Mr.s: misters$survived[indexes] ) these 4 features
+#don't give us much information in terms of finding clean separations in terms of Mr.s. and we should look elsewhere. 
+####
+
+#####
+#How about we create these 2D projections on top of all data non-misters+most_correct?
+#Maybe if we put them together (basically on top of these 2D projections you combine them with misters),
+#there might be some possibilities to make those ubiqoitus "boundaries" for the decisions.
+#And then, probably use those two dimensions as our features!
+####
+
+set.seed(984357)
+tsne.3 <- Rtsne(data_combined[, features], check_duplicates = FALSE)
+ggplot(NULL, aes(x = tsne.3$Y[1:891, 1], y = tsne.3$Y[1:891, 2], 
+                 color = data_combined$survived[1:891])) +
+  geom_point() +
+  labs(color = "Survived") +
+  ggtitle("tsne 2D Visualization of Features for all Training Data")
+
+# Now conditional mutual information for tsne features for all training
+condinformation(data.combined$survived[1:891], discretize(tsne.3$Y[1:891,]))
+
+####
+#It's not that big of a deal, but.. we are data scientiest we will try them!
+#Should we use them as "helpers" or make a model without we will try. RandomForests are 'quick' to train!
+#And when I find a good model with randomForest I would probably train on same data XGBoost to get slightly better predictions.
+#Thats the strategy!
+####
+
+# Add the tsne features to our data frame for use in model building
+data_combined$tsne.x <- tsne.3$Y[,1]
+data_combined$tsne.y <- tsne.3$Y[,2]
+
+
+####
+#We will first train a decision tree, find the ideal combination and then we will scale it accordingly (randomForest->XGBoost)
+####
+
+
+#####
+#Decision tree #0
+#####
+
+#Recall, this was our best tree with the accuracy 0.8432099!
+
+features <- c("pclass", "new.title", "ticket.party.size", "avg.fare")
+rpart.train.4 <- data_combined[1:891, features]
+
+rpart.4.cv.1 <- rpart.cv(94622, rpart.train.4, RF_LABELS, ctrl_3)
+rpart.4.cv.1
+
+prp(rpart.4.cv.1$finalModel, type = 0, extra = 1, under = TRUE)
+
+
+#####
+#Decision tree #1
+####
+
+features <- c("pclass", "new.title", "ticket.party.size", "avg.fare", 'tsne.x', 'tsne.y')
+
+rpart_train_data <- data_combined[1:891, features]
+
+rpart_3_fold_cv<- rpart.cv(4626, rpart_train_data, RF_LABELS, ctrl_3)
+rpart_3_fold_cv
+
+prp(rpart_3_fold_cv$finalModel, type = 0, extra = 1, under = TRUE)
+
+
+#####
+#Observations:
+#Score // 0.8314254 
+#Seems like tsne.y is highly correlated with pclass and tsne.x like ticket_party_size?
+#Nothing improved in terms of Mr.
+#####
+
+################################################################################################
+
+#####
+#Decision tree #2
+####
+
+features <- c("new.title", "avg.fare", 'tsne.x', 'tsne.y')
+
+rpart_train_data <- data_combined[1:891, features]
+
+rpart_3_fold_cv<- rpart.cv(4626, rpart_train_data, RF_LABELS, ctrl_3)
+rpart_3_fold_cv
+
+prp(rpart_3_fold_cv$finalModel, type = 0, extra = 1, under = TRUE)
+
+#####
+#Observations:
+#Score // 0.8308642  
+#Nothing improved in terms of Mr.
+####
+
+################################################################################################
+
+#####
+#Decision tree #3
+####
+
+features <- c('tsne.x', 'tsne.y')
+
+rpart_train_data <- data_combined[1:891, features]
+
+rpart_3_fold_cv<- rpart.cv(4626, rpart_train_data, RF_LABELS, ctrl_3)
+rpart_3_fold_cv
+
+prp(rpart_3_fold_cv$finalModel, type = 0, extra = 1, under = TRUE)
+
+#####
+#Observations:
+#Tree is too complicated. It speaks to my impulses that it's overfiting (too much boundaries!).
+#Score // 0.7700337  
+####
+
+####
+#Let's see the predictions in terms of Mr.: 
+
+test_submit_data <- data_combined[892:1309, features]
+
+rpart_preds <- predict(rpart_3_fold_cv$finalModel, test_submit_data, type = "class")
+rpart_preds
+
+test_data_with_predictions <- cbind(data_combined[892:1309, c('new.title', 'pclass', features)], rpart_preds)
+
+View(test_data_with_predictions[which(test_data_with_predictions$new.title == 'Mr.' & rpart_preds == 1),])
+
+#####
+#There are 39 guys from the first class out of 245 Mr-s that we predicted that they survived. 
+#####
+nrow(test_data_with_predictions[which(test_data_with_predictions$new.title == 'Mr.' & rpart_preds == 1),])
+nrow(test_data_with_predictions[which(test_data_with_predictions$new.title == 'Mr.'),])
+
+
+################################################################################################
+
+#####
+#Decision tree #4
+#Maybe by using those two new features with the new.title might help with Mr.s?
+####
+
+features <- c("new.title", 'tsne.x', 'tsne.y')
+
+rpart_train_data <- data_combined[1:891, features]
+
+rpart_3_fold_cv<- rpart.cv(4626, rpart_train_data, RF_LABELS, ctrl_3)
+rpart_3_fold_cv
+
+prp(rpart_3_fold_cv$finalModel, type = 0, extra = 1, under = TRUE)
+
+
+######
+#0.8288440 Why I'm doing these? Is there a possibility that randomForest do these permutations for me???
+#Allright, last one!
+#####
+
+features <- c("pclass", "ticket.party.size", "avg.fare", 'tsne.x', 'tsne.y')
+
+rpart_train_data <- data_combined[1:891, features]
+
+rpart_3_fold_cv<- rpart.cv(4626, rpart_train_data, RF_LABELS, ctrl_3)
+rpart_3_fold_cv
+
+prp(rpart_3_fold_cv$finalModel, type = 0, extra = 1, under = TRUE)
+
+####
+#Not a good idea, at all.
+#Gonna stick with this one, but use a 10-fold CV. Gonna train sequentially tree, randomForest and XGBoost.
+###
+
+################################################################################
+
+####
+#Decision tree
+####
+
+
+features <- c("pclass", "new.title", "ticket.party.size", "avg.fare")
+rpart.train.4 <- data_combined[1:891, features]
+rpart.4.cv.1 <- rpart.cv(3242, rpart.train.4, RF_LABELS, ctrl_1)
+rpart.4.cv.1
+
+prp(rpart.4.cv.1$finalModel, type = 0, extra = 1, under = TRUE)
+
+###
+#Let's check Kaggle score:
+###
+
+
+test_submit_data <- data_combined[892:1309, features]
+
+rpart_preds <- predict(rpart.4.cv.1$finalModel, test_submit_data, type = "class")
+
+submit_df <- data.frame(PassengerId = rep(892:1309), Survived = rpart_preds)
+  
+write.csv(submit_df, file = "RPART_SUB_20200419_1.csv", row.names = FALSE)
+
+###
+#Same score. Now I know that the bug last time was due to the wrong 'features'.
+###
+
+########################################################################################
+
+####
+#Random Forest
+####
+
+features <- c("pclass", "new.title", "ticket.party.size", "avg.fare")
+rf_train_data <- data_combined[1:891, features]
+
+set.seed(1234)
+rf_temp <- randomForest(x = rf_train_data, y = RF_LABELS, ntree = 1000)
+rf_temp
+
+test_submit_data <- data_combined[892:1309, features]
+
+rf_preds <- predict(rf_temp, test_submit_data)
+table(rf_preds)
+
+# Write out a CSV file for submission to Kaggle
+submit_df <- data.frame(PassengerId = rep(892:1309), Survived = rf_preds)
+
+write.csv(submit_df, file = "RF_SUB_20200419_1.csv", row.names = FALSE)
+
+####
+#You need caret and these packages in order for xgboost to work:
+#install.packages(c("e1071", "caret", "doSNOW", "ipred", "xgboost"))
+####
+
+####
+#Bounch of errors at this point so, from here, I will move to the titanic-'final'-model file. 
+#I will move just the necessary files. 
+####
