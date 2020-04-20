@@ -1,13 +1,16 @@
 
 setwd("~/Desktop/git_projects/titanic-ml/titanic")
 
-library(caret)
+
 library(doSNOW)
 library(rpart)
 library(rpart.plot)
 library(randomForest)
 library(stringr)
+library(ggplot2)
+library(caret)
 
+#install.packages(c("foreach", "iterators", "snow", "lattice", "Rcpp"))
 #Get the data
 train_data <- "train.csv"
 test_data <- "test.csv"
@@ -24,6 +27,7 @@ data_combined <- rbind(train_set, test_set_with_survived)
 #Convert pclass and survived as pclass
 data_combined$survived <- as.factor(data_combined$survived)
 data_combined$pclass <- as.factor(data_combined$pclass)
+
 
 ####
 #We will use whole dataset but different features for each Random Forest algorithm. 
@@ -66,6 +70,8 @@ for (i in 1:nrow(data_combined)) {
 }
 
 data_combined$title <- as.factor(titles)
+
+
 
 #####
 #New Titles
@@ -146,7 +152,7 @@ rpart.cv <- function(seed, training, labels, ctrl) {
 
 
 
-
+summary(data_combined$)
 
 
   ##############################################################################################################
@@ -160,6 +166,7 @@ rpart.cv <- function(seed, training, labels, ctrl) {
 
 
 features <- c("pclass", "new.title", "ticket.party.size", "avg.fare")
+
 rpart.train.4 <- data_combined[1:891, features]
 rpart.4.cv.1 <- rpart.cv(3242, rpart.train.4, RF_LABELS, ctrl_1)
 rpart.4.cv.1
@@ -212,7 +219,11 @@ write.csv(submit_df, file = "RF_SUB_20200419_1.csv", row.names = FALSE)
 ####
 
 features <- c("pclass", "new.title", "ticket.party.size", "avg.fare")
-xgboost_train_data <- data_combined[1:891, features]
+xgboost_train_data <- cbind(data_combined[1:891, features], survived = RF_LABELS)
+View(xgboost_train_data)
+
+xgboost_train_data$new.title <- as.character(xgboost_train_data$new.title)
+xgboost_train_data$new.title <- as.factor(xgboost_train_data$new.title)
 
 train.control <- trainControl(method = "repeatedcv",
                               number = 10,
@@ -236,9 +247,35 @@ cl <- makeCluster(6, type = "SOCK")
 
 registerDoSNOW(cl)
 
-xgboost_train <- train(x = xgboost_train_data, y = RF_LABELS, method = "xgbTree", tuneGrid = tune.grid, trControl = train.control)
+xgboost_train <- train(survived ~ .,
+                       data = xgboost_train_data,
+                       method = "xgbTree", tuneGrid = tune.grid, trControl = train.control)
 
 stopCluster(cl)
 
+xgboost_train
 
-preds <- predict(caret.cv, titanic.test)
+#saveRDS(xgboost_train, "xgboost_model_1.rds")
+xg_boost_model <- readRDS("xgboost_model_1.rds")
+
+#####
+test_submit_data <- data_combined[892:1309, features]
+test_submit_data$new.title <- as.character(test_submit_data$new.title)
+test_submit_data$new.title <- as.factor(test_submit_data$new.title)
+
+xg_boost_preds <- predict(xg_boost_model, test_submit_data)
+table(xg_boost_preds)
+
+submit_df <- data.frame(PassengerId = rep(892:1309), Survived = xg_boost_preds)
+View(xg_boost_preds)
+
+write.csv(submit_df, file = "XGBOOST_SUB_20200420_1.csv", row.names = FALSE)
+
+
+#####
+#If you ever run with problems installing something in R, update your Xcode Command-line Tools via terminal
+#by hiting: xcode-select --install
+#####
+
+
+
