@@ -152,8 +152,6 @@ rpart.cv <- function(seed, training, labels, ctrl) {
 
 
 
-summary(data_combined$)
-
 
   ##############################################################################################################
   #                                            MODELING                                                        #
@@ -214,6 +212,7 @@ write.csv(submit_df, file = "RF_SUB_20200419_1.csv", row.names = FALSE)
 # XGBoost
 #=================================================================
 
+
 ####
 #10 folds CV repeated 3 times, with the gird search that tries all the permutations of tuning parameters in order to find the best model.
 ####
@@ -224,6 +223,7 @@ View(xgboost_train_data)
 
 xgboost_train_data$new.title <- as.character(xgboost_train_data$new.title)
 xgboost_train_data$new.title <- as.factor(xgboost_train_data$new.title)
+
 
 train.control <- trainControl(method = "repeatedcv",
                               number = 10,
@@ -241,6 +241,9 @@ tune.grid <- expand.grid(eta = c(0.05, 0.075, 0.1),
                          colsample_bytree = c(0.3, 0.4, 0.5),
                          gamma = 0,
                          subsample = 1)
+
+
+View(xgboost_train_data[,-1])
 
 
 cl <- makeCluster(6, type = "SOCK")
@@ -262,6 +265,9 @@ xg_boost_model <- readRDS("xgboost_model_1.rds")
 test_submit_data <- data_combined[892:1309, features]
 test_submit_data$new.title <- as.character(test_submit_data$new.title)
 test_submit_data$new.title <- as.factor(test_submit_data$new.title)
+
+#write.csv(xgboost_train_data, file = "xgboost_train_data.csv", row.names = FALSE)
+#write.csv(test_submit_data, file = "test_submit_data.csv", row.names = FALSE)
 
 xg_boost_preds <- predict(xg_boost_model, test_submit_data)
 table(xg_boost_preds)
